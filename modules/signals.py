@@ -60,20 +60,32 @@ def plot_realization(df: pd.DataFrame, alpha: str, perfs: List[str], norm: str =
 def compute_key_metrics(df: pd.DataFrame, alpha: str, perfs: List[str]):
     
     metrics = {
-        "perf": [],
         "sharpe": [],
         "bias": [],
-        "alpha": []
+        "beta": []
     }
     
     for perf in perfs:
         
         beta = df[alpha].cov(df[perf]) / df[alpha].var()
+        bias = df[alpha].cov(df[perf]) / df[alpha].std()
         
-        metrics["perf"].append(df[perf].sum())
-        metrics["sharpe"].append(df[perf].mean() / df[perf].std())
-        metrics["bias"].append(beta * (df["alpha"] * df["perf"]))
-        metrics["alpha"].append(df[alpha].mean())
+        df["realized"] = beta * df[alpha] * df[perf]
+        
+        mean_return_hourly = df['realized'].mean()
+        std_dev_hourly = df['realized'].std()
+
+        annualized_mean_return = mean_return_hourly * 8760  # 365 days * 24 hours
+        annualized_std_dev = std_dev_hourly * np.sqrt(8760)
+
+        risk_free_rate = 0
+        annualized_mean_excess_return = annualized_mean_return - risk_free_rate
+
+        sharpe_ratio = annualized_mean_excess_return / annualized_std_dev
+        
+        metrics["sharpe"].append(sharpe_ratio)
+        metrics["bias"].append(bias)
+        metrics["beta"].append(beta)
         
         
     return metrics
