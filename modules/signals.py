@@ -13,14 +13,14 @@ def get_sentiment_score(df: pd.DataFrame, lag: str, exponential_decay: bool, num
         if exponential_decay:
             return s.ewm(halflife=lag, times=times).sum()
         else:
-            return s.rolling(lag).sum()
+            return s.rolling(window=lag).sum()
 
     if num_comments_weighting:
         df["rolling_positive_score"] = get_rolling(df["num_comments"]*df["positive_score"])
         df["rolling_negative_score"] = get_rolling(df["num_comments"]*df["negative_score"])
     else:
-        df["rolling_positive_score"] = get_rolling(df["positive_score"])
-        df["rolling_negative_score"] = get_rolling(df["negative_score"])
+        df["rolling_positive_score"] = get_rolling(df[["positive_score"]])
+        df["rolling_negative_score"] = get_rolling(df[["negative_score"]])
     
     df[alpha_name] = (df["rolling_positive_score"] - df["rolling_negative_score"]) / (df["rolling_positive_score"] + df["rolling_negative_score"] + 1e-4)
 
@@ -72,7 +72,7 @@ def get_relative_strength_index(lookback:int=24*14, lower_cutoff:str=None, upper
         else:
             return 0
 
-    dfh["rsi_signal"] = dfh.apply(get_rsi_signal, axis=1)
+    dfh["rsi_signal"] = dfh.apply(get_rsi_signal, axis=1)   
     
     return dfh
 
@@ -124,30 +124,39 @@ def plot_realization(df: pd.DataFrame, alphas: List[str], perfs: List[str], norm
     
     plt.rcParams.update({'font.size': 14, 'axes.labelsize': 16, 'axes.titlesize': 18})
     
-    fig, ax = plt.subplots(figsize=(12, 6))
-    
-    for perf in perfs:
-        for alpha in alphas:
+    _, ax = plt.subplots(figsize=(12, 6))
+
+    for i, alpha in enumerate(alphas):
+        for j, perf in enumerate(perfs):
             if norm == "l1":
                 df["real"] = np.sign(df[alpha]) * df[perf]
                 df["real"] = df["real"] * (np.abs(df[alpha]) > threshold)
             elif norm == "l2":
                 beta = df[alpha].cov(df[perf]) / df[alpha].var()
-                df["real"] = beta * df[alpha] * df[perf]
+                # intercept = df[perf].mean() - beta*df[alpha].mean()
+                df["real"] =  df[alpha] * (df[perf] * beta) # (intercept + (df[perf] * beta))
+                # print(beta)
             
             # Calculate cumulative sum for the 'real' column
             df['cumulative_real'] = df['real'].cumsum()
             
             # Plot each performance with a label
-            sns.lineplot(data=df, x="datetime", y="cumulative_real", ax=ax, label=f"{alpha} predicts {perf} ({norm} norm)")
+            sns.lineplot(
+                data=df, 
+                x="datetime", 
+                y="cumulative_real", 
+                ax=ax, 
+                label=f"{alpha}, {perf}",
+                color=sns.color_palette()[i],
+                linestyle=(0, (1+j,1+j))
+            )
     
     # Adding titles and labels
-    ax.set_title("Cumulative Realized Performance")
+    ax.set_title(f"Cumulative Realized Performance ({norm})")
     ax.set_ylabel("Cumulative Performance")
     ax.set_xlabel("Date")
     ax.legend(title="Performance Metrics")
-    
-    return fig, ax
+    plt.show()
 
     
 def compute_key_metrics(df: pd.DataFrame, alpha: str, perfs: List[str]):
