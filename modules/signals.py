@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from typing import List
 
-def get_sentiment_score(df: pd.DataFrame, lag: str, exponential_decay: bool, num_comments_weighting: bool):
+def get_sentiment_score(df: pd.DataFrame, lag: str, exponential_decay: bool, num_comments_weighting: bool, alpha_name: str):
     """lag can be specified as timedelta"""
 
     def get_rolling(s: pd.Series, exponential_decay=exponential_decay, lag=lag, times=df["datetime"]):
@@ -20,9 +20,10 @@ def get_sentiment_score(df: pd.DataFrame, lag: str, exponential_decay: bool, num
         df["rolling_positive_score"] = get_rolling(df["positive_score"])
         df["rolling_negative_score"] = get_rolling(df["negative_score"])
     
-    df["alpha"] = (df["rolling_positive_score"] - df["rolling_negative_score"]) / (df["rolling_positive_score"] + df["rolling_negative_score"] + 1e-4)
+    df[alpha_name] = (df["rolling_positive_score"] - df["rolling_negative_score"]) / (df["rolling_positive_score"] + df["rolling_negative_score"] + 1e-4)
 
     return df
+
 
 def plot_realization(df: pd.DataFrame, alpha: str, perfs: List[str], norm: str = "l1", threshold: float = 0.0):
 
