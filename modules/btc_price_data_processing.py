@@ -24,7 +24,7 @@ def add_performance_metrics(df: pd.DataFrame, lags: List[int]):
     btc_df = load_btc_price_data()
     btc_df = restrict_datetime_range(df, btc_df)
     
-    freq = "H"
+    freq = "h"
     dfh = btc_df.groupby(pd.Grouper(key="datetime", freq=freq))["open"].first().to_frame().copy()   
 
     for lag in lags:
@@ -35,4 +35,5 @@ def add_performance_metrics(df: pd.DataFrame, lags: List[int]):
         df = pd.merge_asof(dfh[f"perf_{lag}"], df, on='datetime', direction='backward')
         
     return df
+    
 
