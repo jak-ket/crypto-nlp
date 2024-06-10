@@ -27,7 +27,7 @@ def get_sentiment_score(df: pd.DataFrame, lag: str, exponential_decay: bool, num
     return df
     
 
-def get_relative_strength_index(lower_cutoff:str, lookback:int=24*14):
+def get_relative_strength_index(lookback:int=24*14, lower_cutoff:str=None, upper_cutoff:str=None):
     """"
     Relative Strength Index (RSI)
     lookback: number of hours to look back
@@ -41,7 +41,11 @@ def get_relative_strength_index(lower_cutoff:str, lookback:int=24*14):
     dfh = btc_df.groupby(pd.Grouper(key="datetime", freq=freq))["open"].first().to_frame().copy()   
 
     # cutoff time series
-    dfh = dfh.loc[dfh.index>=lower_cutoff]
+    if lower_cutoff:
+        dfh = dfh.loc[dfh.index>=lower_cutoff]
+    
+    if upper_cutoff:
+        dfh = dfh.loc[dfh.index<=upper_cutoff]
 
     # get hourly returns
     dfh.loc[:,f"open_lag_1"] = dfh["open"].shift(periods=-1)
@@ -73,7 +77,7 @@ def get_relative_strength_index(lower_cutoff:str, lookback:int=24*14):
     return dfh
 
 
-def get_moving_average_crossover(lower_cutoff:str, sma:int=24, lma:int=24*7, thres:float=0) -> pd.DataFrame:
+def get_moving_average_crossover(sma:int=24, lma:int=24*7, thres:float=0, lower_cutoff:str=None, upper_cutoff:str=None) -> pd.DataFrame:
     """
     Create Moving Average CrossOver (MACO) signal
     lower_cutoff: date where signal time series should start
@@ -90,7 +94,11 @@ def get_moving_average_crossover(lower_cutoff:str, sma:int=24, lma:int=24*7, thr
     dfh = btc_df.groupby(pd.Grouper(key="datetime", freq=freq))["open"].first().to_frame().copy()   
 
     # cutoff time series
-    dfh = dfh.loc[dfh.index>=lower_cutoff]
+    if lower_cutoff:
+        dfh = dfh.loc[dfh.index>=lower_cutoff]
+
+    if upper_cutoff:
+        dfh = dfh.loc[dfh.index<=upper_cutoff]
 
     # get moving averages
     dfh["sMA"] = dfh["open"].rolling(f"{sma}h").mean()
@@ -109,7 +117,7 @@ def get_moving_average_crossover(lower_cutoff:str, sma:int=24, lma:int=24*7, thr
     return dfh
     
 
-def plot_realization(df: pd.DataFrame, alpha: str, perfs: List[str], norm: str = "l1", threshold: float = 0.0):
+def plot_realization(df: pd.DataFrame, alphas: List[str], perfs: List[str], norm: str = "l1", threshold: float = 0.0):
 
     sns.set_style('whitegrid')
     sns.set_palette("Set2")
@@ -119,19 +127,19 @@ def plot_realization(df: pd.DataFrame, alpha: str, perfs: List[str], norm: str =
     fig, ax = plt.subplots(figsize=(12, 6))
     
     for perf in perfs:
-        
-        if norm == "l1":
-            df["real"] = np.sign(df[alpha]) * df[perf]
-            df["real"] = df["real"] * (np.abs(df[alpha]) > threshold)
-        elif norm == "l2":
-            beta = df[alpha].cov(df[perf]) / df[alpha].var()
-            df["real"] = beta * df[alpha] * df[perf]
-        
-        # Calculate cumulative sum for the 'real' column
-        df['cumulative_real'] = df['real'].cumsum()
-        
-        # Plot each performance with a label
-        sns.lineplot(data=df, x="datetime", y="cumulative_real", ax=ax, label=f"{perf} ({norm} norm)")
+        for alpha in alphas:
+            if norm == "l1":
+                df["real"] = np.sign(df[alpha]) * df[perf]
+                df["real"] = df["real"] * (np.abs(df[alpha]) > threshold)
+            elif norm == "l2":
+                beta = df[alpha].cov(df[perf]) / df[alpha].var()
+                df["real"] = beta * df[alpha] * df[perf]
+            
+            # Calculate cumulative sum for the 'real' column
+            df['cumulative_real'] = df['real'].cumsum()
+            
+            # Plot each performance with a label
+            sns.lineplot(data=df, x="datetime", y="cumulative_real", ax=ax, label=f"{alpha} predicts {perf} ({norm} norm)")
     
     # Adding titles and labels
     ax.set_title("Cumulative Realized Performance")
