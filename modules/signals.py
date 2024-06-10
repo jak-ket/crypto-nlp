@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from typing import List
 
+from modules.btc_price_data_processing import load_btc_price_data
+
 def get_sentiment_score(df: pd.DataFrame, lag: str, exponential_decay: bool, num_comments_weighting: bool, alpha_name: str):
     """lag can be specified as timedelta"""
 
@@ -23,7 +25,89 @@ def get_sentiment_score(df: pd.DataFrame, lag: str, exponential_decay: bool, num
     df[alpha_name] = (df["rolling_positive_score"] - df["rolling_negative_score"]) / (df["rolling_positive_score"] + df["rolling_negative_score"] + 1e-4)
 
     return df
+    
 
+def get_relative_strength_index(lower_cutoff:str, lookback:int=24*14):
+    """"
+    Relative Strength Index (RSI)
+    lookback: number of hours to look back
+    lower_cutoff: date where signal time series should start
+    """
+    # get bitcoin time series
+    btc_df = load_btc_price_data()
+    # btc_df = restrict_datetime_range(df, btc_df)
+
+    freq = "h"
+    dfh = btc_df.groupby(pd.Grouper(key="datetime", freq=freq))["open"].first().to_frame().copy()   
+
+    # cutoff time series
+    dfh = dfh.loc[dfh.index>=lower_cutoff]
+
+    # get hourly returns
+    dfh.loc[:,f"open_lag_1"] = dfh["open"].shift(periods=-1)
+    dfh[f"perf_1"] = (dfh[f"open_lag_1"] - dfh["open"]) / dfh["open"]
+    
+    # get extra columns with indicator for positive and negative returns
+    dfh["is_gain"] = np.where(dfh[f"perf_1"] > 0, 1, 0)
+    dfh["is_loss"] = np.where(dfh[f"perf_1"] < 0, 1, 0)
+
+    # rolling mean over gains and losses
+    dfh["avg_gain"] = dfh["is_gain"].rolling(f"{lookback}h").sum() / lookback 
+    dfh["avg_loss"] = dfh["is_loss"].rolling(f"{lookback}h").sum() / lookback
+
+    # compute rsi
+    # dfh["rsi"] = 100 - (100/(1+dfh["rs_raw"]))
+    dfh["rsi"] = dfh["avg_gain"] / (dfh["avg_gain"] + dfh["avg_loss"])
+
+    # compute signal
+    def get_rsi_signal(row):
+        if row["rsi"] > 0.55:
+            return -1
+        elif row["rsi"] < 0.45:
+            return +1
+        else:
+            return 0
+
+    dfh["rsi_signal"] = dfh.apply(get_rsi_signal, axis=1)
+    
+    return dfh
+
+
+def get_moving_average_crossover(lower_cutoff:str, sma:int=24, lma:int=24*7, thres:float=0) -> pd.DataFrame:
+    """
+    Create Moving Average CrossOver (MACO) signal
+    lower_cutoff: date where signal time series should start
+
+    sma: short moving average in hours
+    lma: long moving average in hours
+    thres: threshold for crossover signal, e.g. thres=0.2 requires sMA > 1.2*lMA for signal = +1 or sMA < 0.8*lMA for signal = -1
+    """
+    # get bitcoin time series
+    btc_df = load_btc_price_data()
+    # btc_df = restrict_datetime_range(df, btc_df)
+
+    freq = "h"
+    dfh = btc_df.groupby(pd.Grouper(key="datetime", freq=freq))["open"].first().to_frame().copy()   
+
+    # cutoff time series
+    dfh = dfh.loc[dfh.index>=lower_cutoff]
+
+    # get moving averages
+    dfh["sMA"] = dfh["open"].rolling(f"{sma}h").mean()
+    dfh["lMA"] = dfh["open"].rolling(f"{lma}h").mean()
+
+    # get signal
+    def get_maco_signal(row):
+        if row["sMA"] > (1+thres)*row["lMA"]:
+            return +1
+        elif row["sMA"] < (1-thres)*row["lMA"]:
+            return -1
+        else:
+            return 0
+    dfh["maco_signal"] = dfh.apply(get_maco_signal, axis=1)
+
+    return dfh
+    
 
 def plot_realization(df: pd.DataFrame, alpha: str, perfs: List[str], norm: str = "l1", threshold: float = 0.0):
 
@@ -79,7 +163,7 @@ def compute_key_metrics(df: pd.DataFrame, alpha: str, perfs: List[str]):
         annualized_mean_return = mean_return_hourly * 8760  # 365 days * 24 hours
         annualized_std_dev = std_dev_hourly * np.sqrt(8760)
 
-        risk_free_rate = 0
+        risk_free_rate = 0.0
         annualized_mean_excess_return = annualized_mean_return - risk_free_rate
 
         sharpe_ratio = annualized_mean_excess_return / annualized_std_dev
