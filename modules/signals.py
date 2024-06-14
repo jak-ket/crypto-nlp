@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from typing import List
+from typing import List, Optional
 
 from modules.btc_price_data_processing import load_btc_price_data
 
@@ -11,9 +11,9 @@ def get_sentiment_score(df: pd.DataFrame, lag: str, exponential_decay: bool, num
 
     def get_rolling(s: pd.Series, exponential_decay=exponential_decay, lag=lag, times=df["datetime"]):
         if exponential_decay:
-            return s.ewm(halflife=lag, times=times).sum()
+            return s.ewm(halflife=lag, times=times).mean()
         else:
-            return s.rolling(window=lag).sum()
+            return s.rolling(window=lag).mean()
 
     if num_comments_weighting:
         df["rolling_positive_score"] = get_rolling(df["num_comments"]*df["positive_score"])
@@ -117,14 +117,40 @@ def get_moving_average_crossover(sma:int=24, lma:int=24*7, thres:float=0, lower_
     return dfh
     
 
-def plot_realization(df: pd.DataFrame, alphas: List[str], perfs: List[str], norm: str = "l1", threshold: float = 0.0):
-
-    sns.set_style('whitegrid')
-    sns.set_palette("Set2")
+def plot_realization(df: pd.DataFrame, alphas: List[str], perfs: List[str], 
+                     norm: str = "l1", threshold: float = 0.0, save: bool = False,
+                     alpha_labels: Optional[List[str]] = None, perf_labels: Optional[List[str]] = None):
     
+    # Also allow for single strings
+    if isinstance(alphas, str):
+        alphas = [alphas]
+    if isinstance(perfs, str):
+        perfs = [perfs]
+
+    # Use default labels if custom labels are not provided
+    if alpha_labels is None:
+        alpha_labels = alphas
+    if perf_labels is None:
+        perf_labels = perfs
+
+    sns.set_style('white')
+    
+    # Set up colors and linestyles
+    color_palette = sns.color_palette("Set2", n_colors=len(alphas))
+    linestyles = ['-', '--', '-.', ':']
+
     plt.rcParams.update({'font.size': 14, 'axes.labelsize': 16, 'axes.titlesize': 18})
     
     _, ax = plt.subplots(figsize=(12, 6))
+
+    # Dummy plots for the legend for colors (alpha labels)
+    for i, label in enumerate(alpha_labels):
+        ax.plot([], [], color=color_palette[i], label=label)
+
+    # Dummy plots for the legend for linestyles (performance labels)
+    if len(perfs) > 1:
+        for j, label in enumerate(perf_labels):
+            ax.plot([], [], linestyle=linestyles[j % len(linestyles)], color='black', label=label)
 
     for i, alpha in enumerate(alphas):
         for j, perf in enumerate(perfs):
@@ -133,29 +159,40 @@ def plot_realization(df: pd.DataFrame, alphas: List[str], perfs: List[str], norm
                 df["real"] = df["real"] * (np.abs(df[alpha]) > threshold)
             elif norm == "l2":
                 beta = df[alpha].cov(df[perf]) / df[alpha].var()
-                # intercept = df[perf].mean() - beta*df[alpha].mean()
-                df["real"] =  df[alpha] * (df[perf] * beta) # (intercept + (df[perf] * beta))
-                # print(beta)
+                df["real"] = df[alpha] * (df[perf] * beta)
             
             # Calculate cumulative sum for the 'real' column
             df['cumulative_real'] = df['real'].cumsum()
             
-            # Plot each performance with a label
+            # Actual plot for each combination
             sns.lineplot(
                 data=df, 
                 x="datetime", 
                 y="cumulative_real", 
                 ax=ax, 
-                label=f"{alpha}, {perf}",
-                color=sns.color_palette()[i],
-                linestyle=(0, (1+j,1+j))
+                color=color_palette[i],
+                linestyle=linestyles[j % len(linestyles)]
             )
     
-    # Adding titles and labels
-    ax.set_title(f"Cumulative Realized Performance ({norm})")
-    ax.set_ylabel("Cumulative Performance")
+    # Set labels and configure the legend
+    ax.set_ylabel("Cumulative Realization")
     ax.set_xlabel("Date")
-    ax.legend(title="Performance Metrics")
+    
+    # Organize the legend to first show alpha colors, then performance linestyles (if more than one)
+    handles, labels = ax.get_legend_handles_labels()
+    # Include performance labels in the legend only if there are more than one perf
+    if len(perfs) > 1:
+        order = list(range(len(alpha_labels))) + list(range(len(alpha_labels), len(alpha_labels) + len(perf_labels)))
+    else:
+        order = list(range(len(alpha_labels)))
+
+    ax.legend([handles[idx] for idx in order], [labels[idx] for idx in order], title="Legend", loc='upper left')
+    
+    sns.despine()
+    
+    if save:
+        plt.savefig("realized_performance.pdf", bbox_inches='tight')
+    
     plt.show()
 
     
