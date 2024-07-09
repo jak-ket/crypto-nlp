@@ -4,12 +4,22 @@ from nltk.corpus import stopwords
 from nltk.stem import PorterStemmer
 from nltk.tokenize import word_tokenize
 import pandas as pd
-from gensim import corpora, models
+# from gensim import corpora, models
 from nltk.tokenize import RegexpTokenizer
 
 # Download necessary NLTK resources
 nltk.download("punkt")
 nltk.download("stopwords")
+
+
+def filter_lda_topic(df, topic, topic_keywords_file):
+    topic_keywords = pd.read_csv(topic_keywords_file)
+    trading_keywords = topic_keywords.loc[topic_keywords["Topic"]==topic, "Keyword"].values
+    print(f"{topic} consists of the following keywords: {trading_keywords}")
+    lda_filter = df["selftext"].str.lower().str.contains("|".join(trading_keywords))
+    df_lda = df.loc[lda_filter].copy()
+    print(f"Removed {df.shape[0] - df_lda.shape[0]} rows by filtering on {topic}!")
+    return df_lda
 
 
 def create_lda_model(

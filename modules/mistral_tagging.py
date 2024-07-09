@@ -62,7 +62,7 @@ def mistral_relevant_text_identification(df: pd.DataFrame, text_column: str):
 
 if __name__ == "__main__":
     
-    df = pd.read_csv("bitcoin_2022/submission.csv")
+    df = pd.read_csv("data_2022/submission.csv")
     df = preprocess_data(df)
     df = mistral_relevant_text_identification(df, "selftext")
     

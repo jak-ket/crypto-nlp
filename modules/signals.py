@@ -27,12 +27,14 @@ def get_sentiment_score(df: pd.DataFrame, lag: str, exponential_decay: bool, num
     return df
     
 
-def get_relative_strength_index(lookback:int=24*14, lower_cutoff:str=None, upper_cutoff:str=None):
+def get_relative_strength_index(lookback:int=24*14, lower_cutoff:str=None, upper_cutoff:str=None, gamma=0.3):
     """"
     Relative Strength Index (RSI)
     lookback: number of hours to look back
     lower_cutoff: date where signal time series should start
     """
+    assert (gamma <= 0.5) & (gamma >= 0.0)
+    
     # get bitcoin time series
     btc_df = load_btc_price_data()
     # btc_df = restrict_datetime_range(df, btc_df)
@@ -65,9 +67,9 @@ def get_relative_strength_index(lookback:int=24*14, lower_cutoff:str=None, upper
 
     # compute signal
     def get_rsi_signal(row):
-        if row["rsi"] > 0.55:
+        if row["rsi"] > 0.5 + gamma:
             return -1
-        elif row["rsi"] < 0.45:
+        elif row["rsi"] < 0.5 - gamma:
             return +1
         else:
             return 0
